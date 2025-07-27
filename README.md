@@ -19,7 +19,7 @@ an input string is split into:
 
 a UID matches if:
 
-```
+```c++
 uid.startswith(left) && uid.endswith(right)
 ```
 
@@ -29,14 +29,16 @@ example:
 ## BUILD
 
 ```bash
-make        # build uidtool
-make test   # run unit tests
+./bootstrap.sh 
+./configure
+make
+make check
 ```
 
 ## USAGE
 
 ```bash
-./uidtool 12341234 12349875976 12340870987076
+src/uidtool 12341234 12349875976 12340870987076
 ```
 
 then type input lines interactively (e.g. `1234`, `129076`, etc.)
@@ -48,9 +50,11 @@ unit tests cover:
 - `UidResponder::matches`
 - `UidResponder::generateCollision`
 
+`make check` command builds and run unit test. run `src/test_uidresp`
+in order to get more information about tests .
+
 framework: GoogleTest, see `Makefile`.
 
 ## author
 
 crazybrake <crazybrake -sobaka- gmail dot com>, 2025
-

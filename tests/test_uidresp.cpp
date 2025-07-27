@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../uidresp.h"
+#include "uidresp.h"
 
 TEST(UidResponderTest, MatchExactLeftAndRight)
 {
