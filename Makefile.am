@@ -9,5 +9,6 @@ distclean-local:
 	  tests/test_uidresp tests/test-suite.log \
 	  uidresp ./*~ compile depcomp install-sh config.guess config.sub \
 	  Makefile.in src/Makefile.in tests/Makefile.in \
-	  ltmain.sh test-driver missing
+	  ltmain.sh test-driver missing \
+	  src/.deps tests/.deps
 
