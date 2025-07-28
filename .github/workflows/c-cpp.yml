@@ -22,7 +22,7 @@ jobs:
         sudo apt-get install -y \
           make g++ \
           autoconf automake libtool pkg-config \
-          libgtest-dev  sudo apt-get install -y autoconf automake libtool pkg-config
+          libgtest-dev autoconf automake libtool pkg-config
         ./bootstrap.sh
         
     - name: configure
