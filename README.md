@@ -1,19 +1,25 @@
-# UIDRESP
+# UIDRESP and UIDSCAN
 
-minimal CLI tool to simulate UID responses in AISG device discovery.
+minimal CLI tools to simulate and scan UID responses in AISG device
+discovery.
 
-## BEHAVIOR
+## COMPONENTS
 
-takes a list of full UIDs as arguments, then reads input lines from stdin:
+### uidresp
 
-- if exactly one UID matches → prints it
-- if multiple match → prints a generated garbage collision
+simulates AISG device responses to UID patterns.
+
+#### behavior
+
+takes a list of full UIDs as arguments and reads input lines from stdin:
+
+- if exactly one UID matches the pattern → prints it
+- if multiple match → prints a collision string (garbage-like output)
 - if no match → prints nothing
 
-## MATCH RULE
+#### match rule
 
 an input string is split into:
-
 - first two characters (`left`)
 - remaining characters (`right`)
 
@@ -26,7 +32,7 @@ uid.startswith(left) && uid.endswith(right)
 example:  
 `input = "12xx56"` matches `uid = "12abc56"`
 
-## BUILD
+#### build
 
 ```bash
 ./bootstrap.sh 
@@ -35,25 +41,63 @@ make
 make check
 ```
 
-## USAGE
+
+#### special commands
+
+when running interactively, `uidresp` accepts the following control commands:
+
+- `SETADDR <UID> <addr>` — manually assign address to a UID (e.g. for simulation)
+- `RESETADDR <UID>` — remove previously assigned address from UID
+- `RESETALL` — clear all assigned addresses
+
+#### run
 
 ```bash
-src/uidtool 12341234 12349875976 12340870987076
+src/uidresp AB12345678901234567 AB02345678901234567
 ```
 
-then type input lines interactively (e.g. `1234`, `129076`, etc.)
+then type pattern lines interactively, e.g.:
+```
+AB
+AB3
+AB567
+```
 
-## TESTS
+### uidscan
+
+actively discovers UIDs using pattern refinement based on collision
+responses.
+
+- iteratively refines the search by expanding the pattern inwards
+- collects and mutes discovered UIDs
+- supports automatic scanning over `socat`
+
+#### example (socat)
+
+you can run `uidresp` and `uidscan` in pair using `socat`:
+
+```bash
+socat exec:"src/uidresp AB12345678901234567 AB02345678901234567" \
+  exec:"src/uidscan AB"
+```
+
+this will run a full scan for all devices that match prefix `AB` and
+follow the expected UID format.
+
+## tests
 
 unit tests cover:
-
 - `UidResponder::matches`
 - `UidResponder::generateCollision`
 
-`make check` command builds and run unit test. run `src/test_uidresp`
-in order to get more information about tests .
+use `make check` to run tests.  
+for more detailed output:
 
-framework: GoogleTest, see `Makefile`.
+```bash
+src/test_uidresp
+```
+
+framework: GoogleTest
 
 ## author
 
