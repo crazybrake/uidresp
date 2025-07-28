@@ -12,17 +12,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: install dependencies
+      run: |
+      
     - uses: actions/checkout@v4
     - name: bootstrap
       run: |
         sudo apt-get update
-        sudo apt-get install -y autoconf automake libtool pkg-config
+        sudo apt-get install -y \
+          make g++ \
+          autoconf automake libtool pkg-config \
+          libgtest-dev  sudo apt-get install -y autoconf automake libtool pkg-config
         ./bootstrap.sh
+        
     - name: configure
       run: ./configure
+      
     - name: make
       run: make
+      
     - name: make check
       run: make check
+      
     - name: make distcheck
       run: make distcheck
