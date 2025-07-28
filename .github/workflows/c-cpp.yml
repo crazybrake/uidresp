@@ -13,6 +13,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: bootstrap
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y autoconf automake libtool pkg-config
+        ./bootstrap.sh
     - name: configure
       run: ./configure
     - name: make
