@@ -46,8 +46,8 @@ make check
 
 when running interactively, `uidresp` accepts the following control commands:
 
-- `SETADDR <UID> <addr>` — manually assign address to a UID (e.g. for simulation)
-- `RESETADDR <UID>` — remove previously assigned address from UID
+- `SETADDR:<UID>` — manually assign address to a UID (e.g. for simulation)
+- `RESETADDR:<UID>` — remove previously assigned address from UID
 - `RESETALL` — clear all assigned addresses
 
 #### run
