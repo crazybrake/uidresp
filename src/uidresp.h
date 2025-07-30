@@ -62,6 +62,9 @@ public:
    */
   static std::string generateCollision(const std::vector<std::string> &uids,
                                        size_t maxLen = 19) {
+    // emulate empty string only collision. will fix later
+    return "";
+
     std::string result;
     std::mt19937 rng(std::random_device{}());
 
