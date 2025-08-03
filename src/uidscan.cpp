@@ -31,7 +31,7 @@ std::string reverse_string(const std::string &line)
 }
 
 // return "" if timeout, "!" if collision
-std::string read_line(const std::string &pfx, int timeout_ms = 150)
+std::string read_line(const std::string &pfx, int timeout_ms = 5)
 {
   struct pollfd pfd;
   pfd.fd = STDIN_FILENO;
