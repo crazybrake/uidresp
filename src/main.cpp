@@ -94,6 +94,14 @@ int main(int argc, char **argv) {
       std::cout << matched[0] << std::endl;
     } else {
       std::string noise = responder.generateCollision(matched);
+      if (matched[0].size() >= 2 && matched[0][0] == 'C'
+            && matched[0][1] == 'B') {
+        // CB vendor returns empty line
+        noise = "";
+      } else {
+        // all others return mix of symbols
+        noise = responder.generateCollision(matched);
+      }
       std::cout << noise << std::endl;
     }
     std::cout.flush();

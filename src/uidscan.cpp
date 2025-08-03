@@ -25,22 +25,14 @@
 #include <string>
 #include <vector>
 
-std::string reverse(const std::string &line, const std::string &pfx) {
-  std::string s(line.rbegin(), line.rend());
-  return pfx + s;
+std::string reverse_string(const std::string &line)
+{
+  return std::string(line.rbegin(), line.rend());
 }
 
-void send_pattern(const std::string &line, const std::string &pfx) {
-  std::cout << reverse(line, pfx) << std::endl;
-  std::cout.flush();
-}
-
-void send(const std::string &line) {
-  std::cout << line << std::endl;
-  std::cout.flush();
-}
-
-std::string read_line(std::string &pfx, int timeout_ms = 5) {
+// return "" if timeout, "!" if collision
+std::string read_line(const std::string &pfx, int timeout_ms = 150)
+{
   struct pollfd pfd;
   pfd.fd = STDIN_FILENO;
   pfd.events = POLLIN;
@@ -49,22 +41,36 @@ std::string read_line(std::string &pfx, int timeout_ms = 5) {
   if (ret > 0 && (pfd.revents & POLLIN)) {
     std::string line;
     if (std::getline(std::cin, line)) {
-      if (!line.empty()) {
-        if (line.compare(0, pfx.size(), pfx) == 0) {
-          std::string uid = line.substr(pfx.size());
-          std::reverse(uid.begin(), uid.end());
-          return uid;
-        }
+      if (!line.empty() && line.size() == 19) {
+        return std::string(line.begin()+2, line.end()); // return
+                                                        // string w/o
+                                                        // prefix
       } else {
-        return "!";
+        return "!"; // collision
       }
     }
   }
-  return "";
+  return ""; // timeout or error
 }
 
-void mute_uid(const std::string &uid, const std::string &pfx) {
-  send("SETADDR:" + reverse(uid, pfx));
+void send(const std::string &line) {
+  std::cout << line << std::endl;
+  std::cout.flush();
+}
+
+std::string send_and_recv(const std::string& line, const std::string& pfx) {
+  send(pfx + reverse_string(line));
+
+  std::string s = read_line(pfx);
+  if (s != "!" ) {
+      return reverse_string(s);
+  }
+  return s;
+}
+
+
+void mute(const std::string &uid, const std::string &pfx) {
+  send("SETADDR:" + pfx + reverse_string(uid));
 }
 
 constexpr int MAXLEN = 17;
@@ -73,84 +79,90 @@ const std::string charset =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
     "-_";
+//
+//
+int main(int argc, char** argv)
+{
+  send("RESETALL");
+  if (argc < 2) {
+    std::cerr << "Usage: " << argv[0] << "<prefix> [prefix ..."
+      << std::endl;
+    return 1;
+  }
+  for (int i = 1; i < argc; i++) {
+    std::string pfx = argv[i];
+    std::set<std::string> found_uids;
+    std::vector<std::string> stack;
+    std::vector<std::string> collision_stack;
 
-int main() {
-  std::string pfx = "CB";
-  std::set<std::string> found_uids;
-  std::set<std::string> tried;
-  std::queue<std::string> q;
+    stack.push_back("");
 
-  q.push("");
+    while (!stack.empty()) {
+      std::string s = stack.back();
+      stack.pop_back();
 
-  while (!q.empty()) {
-    std::string s = q.front();
-    q.pop();
+      for (char c : charset) {
+        if (s.size() >= MAXLEN)
+          continue;
 
-    for (char c : charset) {
-      if (s.size() >= MAXLEN)
-        continue;
+        std::string next = s + c;
 
-      std::string next = s + c;
-      if (tried.count(next))
-        continue;
-      tried.insert(next);
+        std::string resp = send_and_recv(next, pfx);
 
-      send_pattern(next, pfx);
-
-      std::vector<std::string> response;
-
-      while (true) {
-        std::string line = read_line(pfx);
-        if (line.empty())
-          break;
-        response.push_back(line);
-      }
-
-      if (response.empty()) {
-        continue;
-      }
-      if (response[0] == "!") {
-        std::cerr << "COLLISION: " << reverse(next, pfx) << std::endl;
-        q.push(next);  // collision. go deeper
-        continue;
-      }
-
-      if (response.size() == 1) {
-        const std::string &uid_candidate = response[0];
-
-        // repeat attempt
-        send_pattern(next, pfx);
-        std::vector<std::string> confirm;
-        while (true) {
-          std::string line = read_line(pfx);
-          if (line.empty())
-            break;
-          confirm.push_back(line);
+        if (resp.empty()) {
+          continue; // timeout
         }
 
-        if (confirm.size() == 1 && confirm[0] == uid_candidate) {
-          if (!found_uids.count(uid_candidate)) {
-            found_uids.insert(uid_candidate);
-            std::cerr << "[+] UID confirmed: " << reverse(uid_candidate, pfx)
-                      << std::endl;
-            mute_uid(uid_candidate, pfx);
+        if (resp == "!") {
+          // collision
+          std::cerr << "COLLISION: " << pfx + reverse_string(next) << std::endl;
+          stack.push_back(next);
+          collision_stack.push_back(next);
+          continue;
+        }
+
+        // check
+        std::string confirm = send_and_recv(resp, pfx);
+
+        if (confirm.empty()) {
+          // not confirmed -> collision
+          std::cerr << "[implied collision] no confirmation for: "
+                    << pfx + reverse_string(resp) << std::endl;
+          stack.push_back(next);
+          collision_stack.push_back(next);
+          continue;
+        }
+
+        if (confirm == resp) {
+          // подтверждённый UID
+          if (!found_uids.count(resp)) {
+            found_uids.insert(resp);
+            std::cerr << "FOUND: " << pfx + reverse_string(resp) << std::endl;
+            mute(resp, pfx);
           }
-          // go back to collision s: it's possible that there are more
-          q.push(s);
-        } else {
-          // it's collision, go deeper
-          q.push(next);
-        }
 
-      } else {
-        // collision, go deeper
-        q.push(next);
+          stack.push_back(next);
+
+          if (!collision_stack.empty()) {
+            stack.push_back(collision_stack.back());
+            collision_stack.pop_back();
+          }
+        } else {
+          // garbage
+          std::cerr << "[warn] confirmation mismatch: "
+                    << pfx + reverse_string(resp)
+                    << " vs "
+                    << pfx + reverse_string(confirm) << std::endl;
+          stack.push_back(next);
+        }
       }
     }
-  }
 
-  std::cerr << "\n== search complete ==\n";
-  std::cerr << "total uids found: " << found_uids.size() << std::endl;
+    send("RESETALL");
+    std::cerr << "\n== search complete ==\n";
+    std::cerr << "total uids found: " << found_uids.size() << "\n"
+      << std::endl;
+  }
   return 0;
 }
 
