@@ -82,8 +82,26 @@ public:
             result.push_back(candidates[dist(rng)]);
         }
 
+        randomizeFromFifthChar(result);
         return result;
     }
+
+    static void randomizeFromFifthChar(std::string& str) {
+        if (str.size() <= 5) return; // нечего менять
+
+        static const char charset[] =
+            "abcdefghijklmnopqrstuvwxyz"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "0123456789";
+
+        static std::mt19937 rng{std::random_device{}()};
+        static std::uniform_int_distribution<> dist(0, sizeof(charset) - 2); // -2, чтобы не брать '\0'
+
+        for (size_t i = 5; i < str.size(); ++i) {
+            str[i] = charset[dist(rng)];
+        }
+    }
+
 
 private:
     static constexpr size_t MATCH_LEFT = 2;

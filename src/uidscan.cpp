@@ -1,56 +1,78 @@
 /**
  * @file uidscan.cpp
- * @brief UID scanning utility that probes devices using partial pattern
- * matching.
+ * @brief uid scanning utility that probes devices using partial pattern
+ *        matching
  *
- * Sends reversed UID patterns with a prefix and reads back responses. The
- * search goes deeper in case of collisions, trying to find all unique UIDs
- * on the line.
+ * sends string uid patterns with a prefix and reads back responses. the
+ * search goes deeper in case of collisions, trying to find all unique uids
+ * on the line
  *
- * Usage:
- * - Sends reversed string (with prefix) to stdout.
- * - Reads lines from stdin with optional prefix removal.
- * - Detects UID collisions and recursively refines pattern.
- * - Confirms UID by repeating pattern.
- * - Mutes confirmed UIDs using SETADDR command.
+ * usage:
+ * - sends string (with prefix) to stdout
+ * - reads lines from stdin
+ * - detects uid collisions and recursively refines pattern
+ * - confirms uid by repeating pattern
+ * - mutes confirmed uids using setaddr command
  *
- * Expected to be used with a compatible responder (like `uidresp`).
+ * expected to be used with a compatible responder (see `uidresp.cpp`)
  */
 
+#include <getopt.h>
 #include <poll.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <iostream>
-#include <queue>
 #include <set>
 #include <string>
 #include <vector>
 
+constexpr int MAXLEN = 17; // uid length w/o prefix
+const std::string CHARSET = "0123456789"
+                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            "abcdefghijklmnopqrstuvwxyz"
+                            "-_";
+constexpr int POLL_TIMEOUT = 200;
+
+
+int gl_timeout = POLL_TIMEOUT;
+
+/** 
+ * we use reverse strings in algorithm because it's much more easier to
+ * append symbols to string than insert them to beginning. this
+ * `reverse_string` used before sending
+ */ 
 std::string reverse_string(const std::string &line)
 {
     return std::string(line.rbegin(), line.rend());
 }
 
-// return "" if timeout, "!" if collision
-std::string read_line(const std::string &pfx, int timeout_ms = 5)
+/**
+ * @brief read data, detect timeout and, partly, a collision (empty
+ * line with "\n" is the collision, too)
+ *
+ * @return 1. empty string if timeout
+ *         2. "!" if collision because "!" is not a valid symbol in
+ *            any response
+ *         3. response string
+ */
+std::string read_line(int timeout_ms = POLL_TIMEOUT)
 {
     struct pollfd pfd;
     pfd.fd = STDIN_FILENO;
     pfd.events = POLLIN;
 
     int ret = poll(&pfd, 1, timeout_ms);
+
     if (ret > 0 && (pfd.revents & POLLIN)) {
+
         std::string line;
         if (std::getline(std::cin, line)) {
-            if (!line.empty() && line.size() == 19) {
-                return std::string(line.begin() + 2,
-                    line.end()); // return
-                                 // string w/o
-                                 // prefix
-            } else {
-                return "!"; // collision
-            }
+
+            if (!line.empty())
+                return line; // normal response
+
+            return "!"; // collision
         }
     }
     return ""; // timeout or error
@@ -62,112 +84,157 @@ void send(const std::string &line)
     std::cout.flush();
 }
 
-std::string send_and_recv(const std::string &line, const std::string &pfx)
+std::string send_and_recv(const std::string &line)
 {
-    send(pfx + reverse_string(line));
-
-    std::string s = read_line(pfx);
-    if (s != "!") {
-        return reverse_string(s);
-    }
-    return s;
+    send(line);
+    return read_line(gl_timeout);
+}
+/**
+ *  "assign" address: exclude uids we have found from responding
+ */
+void mute(const std::string &uid)
+{
+    // see `src/uidresp.cpp` for additional commands
+    send("SETADDR:" + uid);
 }
 
-void mute(const std::string &uid, const std::string &pfx)
-{
-    send("SETADDR:" + pfx + reverse_string(uid));
-}
-
-constexpr int MAXLEN = 17;
-const std::string charset = "0123456789"
-                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "abcdefghijklmnopqrstuvwxyz"
-                            "-_";
-//
-//
-int main(int argc, char **argv)
+/**
+ * enable all uids to respond
+ */
+void reset_all()
 {
     send("RESETALL");
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << "<prefix> [prefix ..."
-                  << std::endl;
-        return 1;
+}
+
+/**
+ * decect collisions by "collision symbol" ("!"), length and by comparing
+ * with additional response
+ */
+bool collision(const std::string &s)
+{
+    if ((s == "!") || (s.size() != MAXLEN+2))
+        return true;
+
+    std::string resp = send_and_recv(s);
+    // uid length should be MAXLEN + 2 (prefix length)
+    if ((resp.size() != MAXLEN + 2) || (resp != s)) { 
+        return true;
     }
-    for (int i = 1; i < argc; i++) {
-        std::string pfx = argv[i];
-        std::set<std::string> found_uids;
-        std::vector<std::string> stack;
-        std::vector<std::string> collision_stack;
 
-        stack.push_back("");
+    return false;
+}
+/**
+ * the main magic is here: generate pattern, send it, check, recursively go
+ * deeper in the case of collision
+ */
+void scan(const std::string& s, const std::string& pfx,
+    std::set<std::string>& found_uids)
+{
+    if (s.size() >= MAXLEN)
+        return;
 
-        while (!stack.empty()) {
-            std::string s = stack.back();
-            stack.pop_back();
+    for (char c : CHARSET) {
+        std::string next = s + c;
+        std::string resp = send_and_recv(pfx + reverse_string(next));
 
-            for (char c : charset) {
-                if (s.size() >= MAXLEN)
-                    continue;
+        if (resp.empty())
+            continue;
 
-                std::string next = s + c;
-
-                std::string resp = send_and_recv(next, pfx);
-
-                if (resp.empty()) {
-                    continue; // timeout
-                }
-
-                if (resp == "!") {
-                    // collision
-                    std::cerr
-                        << "COLLISION: " << pfx + reverse_string(next)
-                        << std::endl;
-                    stack.push_back(next);
-                    collision_stack.push_back(next);
-                    continue;
-                }
-
-                // check
-                std::string confirm = send_and_recv(resp, pfx);
-
-                if (confirm.empty()) {
-                    // not confirmed -> collision
-                    std::cerr
-                        << "[implied collision] no confirmation for: "
-                        << pfx + reverse_string(resp) << std::endl;
-                    stack.push_back(next);
-                    collision_stack.push_back(next);
-                    continue;
-                }
-
-                if (confirm == resp) {
-                    // подтверждённый UID
-                    if (!found_uids.count(resp)) {
-                        found_uids.insert(resp);
-                        std::cerr
-                            << "FOUND: " << pfx + reverse_string(resp)
-                            << std::endl;
-                        mute(resp, pfx);
-                    }
-
-                    stack.push_back(next);
-
-                    if (!collision_stack.empty()) {
-                        stack.push_back(collision_stack.back());
-                        collision_stack.pop_back();
-                    }
-                } else {
-                    // garbage
-                    std::cerr << "[warn] confirmation mismatch: "
-                              << pfx + reverse_string(resp) << " vs "
-                              << pfx + reverse_string(confirm)
-                              << std::endl;
-                    stack.push_back(next);
-                }
-            }
+        if (collision(resp)) {
+            std::cerr << "COLLISION: " << pfx + reverse_string(next)
+                << std::endl;
+            scan(next, pfx, found_uids); // go deeper
+            continue;
         }
 
-        send("RESETALL");
+        if (found_uids.insert(resp).second) {
+            std::cerr << "FOUND: " << resp << std::endl;
+            mute(resp);
+        }
+    }
+}
+
+
+/**
+ *  check timeout parameter for valid value
+ */
+bool parse_timeout(const char* arg, int& value_out) {
+    char* endptr = nullptr;
+    errno = 0;
+    long val = std::strtol(arg, &endptr, 10);
+
+    if (errno != 0 || endptr == arg || *endptr != '\0' || val < 0) {
+        return false;
+    }
+
+    value_out = static_cast<int>(val);
+    return true;
+}
+
+/**
+ * just for changing global variable
+ */
+void set_timeout(int timeout)
+{
+    gl_timeout = timeout;
+}
+
+/*
+ * help message
+ */
+void usage(char *progname)
+{
+    std::cerr << "Usage: " << progname
+        << " [--timeout|-t <msec>] <prefix> [prefix ...]\n";
+}
+
+int main(int argc, char **argv)
+{
+    set_timeout(POLL_TIMEOUT);
+
+// ---- options parsing ----
+
+    const struct option long_opts[] = {
+        {"timeout", required_argument, nullptr, 't'},
+        {nullptr, 0, nullptr, 0}
+    };
+
+    int opt;
+    int timeout = 0;
+    while ((opt = getopt_long(argc, argv, "t:", 
+        long_opts, nullptr)) != -1) {
+        switch (opt) {
+        case 't':
+            if (!parse_timeout(optarg, timeout)) {
+                std::cerr << "Invalid timeout value: " << optarg
+                    << std::endl;
+                return 1;
+            }
+            set_timeout(timeout);
+            break;
+        default:
+            usage(argv[0]);
+            return 1;
+        }
+    }
+    if (optind >= argc) {
+        usage(argv[0]);
+        return 1;
+    }
+
+// ---- scan logic starts here ----
+
+    reset_all();
+
+    for (int i = optind; i < argc; ++i) {
+
+        std::string pfx = argv[i];
+        std::set<std::string> found_uids;
+
+        scan("", pfx, found_uids);
+
+        reset_all();
+
         std::cerr << "\n== search complete ==\n";
         std::cerr << "total uids found: " << found_uids.size() << "\n"
                   << std::endl;
