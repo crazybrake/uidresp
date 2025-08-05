@@ -51,11 +51,8 @@ int main(int argc, char **argv)
             auto it = std::find(uids.begin(), uids.end(), uid);
             if (it != uids.end()) {
                 muted.insert(uid);
-                // std::cerr << "[muted] " << uid << std::endl;
-            } else {
-                std::cerr << "[warn] tried to mute unknown uid: " << uid
-                          << std::endl;
-            }
+                std::cout << uid << std::endl;
+            } 
             continue;
         }
 

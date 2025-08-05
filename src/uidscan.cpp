@@ -114,8 +114,8 @@ bool collision(const std::string &s)
 {
     if ((s == "!") || (s.size() != MAXLEN+2))
         return true;
-
-    std::string resp = send_and_recv(s);
+    mute(s);
+    std::string resp = read_line();
     // uid length should be MAXLEN + 2 (prefix length)
     if ((resp.size() != MAXLEN + 2) || (resp != s)) { 
         return true;
@@ -123,35 +123,69 @@ bool collision(const std::string &s)
 
     return false;
 }
+
+int level = 0;
 /**
  * the main magic is here: generate pattern, send it, check, recursively go
  * deeper in the case of collision
  */
-void scan(const std::string& s, const std::string& pfx,
-    std::set<std::string>& found_uids)
+size_t scan(const std::string& s, const std::string& pfx,
+    std::set<std::string>& found_uids, size_t index)
 {
-    if (s.size() >= MAXLEN)
-        return;
+    level++;
+    std::cerr << "level=" << level << " index=" << index << std::endl;
 
-    for (char c : CHARSET) {
-        std::string next = s + c;
+    if (s.size() >= MAXLEN) {
+        std::cerr << "lenth limit reached!" << level << " index=" 
+            << index << std::endl;
+        level--;
+        return CHARSET.size();
+    }
+
+    size_t pos = index;
+    size_t inner_index = 0;
+
+    for (; pos < CHARSET.size(); pos++) {
+        std::string next = s + CHARSET[pos];
         std::string resp = send_and_recv(pfx + reverse_string(next));
 
-        if (resp.empty())
+        if (resp.empty()) {
+            inner_index = 0;
             continue;
+        }
 
         if (collision(resp)) {
             std::cerr << "COLLISION: " << pfx + reverse_string(next)
-                << std::endl;
-            scan(next, pfx, found_uids); // go deeper
+                << " inner_index=" << inner_index 
+                << " level=" << level << " pos=" << pos << std::endl;
+            // go deeper
+            if (inner_index < CHARSET.size()) { 
+                inner_index = scan(next, pfx, found_uids, inner_index);
+
+                std::cerr << "inner_index=" << inner_index 
+                    << " level=" << level << " pos=" << pos << std::endl;
+                // need to check the same collision point
+                pos--;
+            } else {
+                inner_index = 0;
+            }
             continue;
         }
 
         if (found_uids.insert(resp).second) {
             std::cerr << "FOUND: " << resp << std::endl;
-            mute(resp);
+            // mute(resp);
+            if (level > 1) {
+                level--;
+                return pos;
+            }
+            else {
+                inner_index = 0;
+            }
         }
     }
+    level--;
+    return pos;
 }
 
 
@@ -231,7 +265,7 @@ int main(int argc, char **argv)
         std::string pfx = argv[i];
         std::set<std::string> found_uids;
 
-        scan("", pfx, found_uids);
+        scan("", pfx, found_uids, 0);
 
         reset_all();
 

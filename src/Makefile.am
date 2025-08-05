@@ -1,5 +1,5 @@
 bin_PROGRAMS = uidresp uidscan
-uidresp_SOURCES = main.cpp uidresp.h
+uidresp_SOURCES = uidresp.cpp uidresp.h
 uidscan_SOURCES = uidscan.cpp
 
 uidresp_CXXFLAGS = -std=c++17 -Wall -Werror
