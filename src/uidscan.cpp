@@ -37,11 +37,13 @@ constexpr int POLL_TIMEOUT = 200;
 
 int gl_timeout = POLL_TIMEOUT;
 
-/** 
+/**
+ * @brief return reversed string
+ *
  * we use reverse strings in algorithm because it's much more easier to
  * append symbols to string than insert them to beginning. this
  * `reverse_string` used before sending
- */ 
+ */
 std::string reverse_string(const std::string &line)
 {
     return std::string(line.rbegin(), line.rend());
@@ -78,19 +80,27 @@ std::string read_line(int timeout_ms = POLL_TIMEOUT)
     return ""; // timeout or error
 }
 
+
+/**
+ *  self-explaining function name ;)
+ */
 void send(const std::string &line)
 {
     std::cout << line << std::endl;
     std::cout.flush();
 }
 
+/**
+ *  self-explaining function name ;)
+ */
 std::string send_and_recv(const std::string &line)
 {
     send(line);
     return read_line(gl_timeout);
 }
+
 /**
- *  "assign" address: exclude uids we have found from responding
+ *  @brief "assign" address: prevent uid from responding
  */
 void mute(const std::string &uid)
 {
@@ -99,7 +109,7 @@ void mute(const std::string &uid)
 }
 
 /**
- * enable all uids to respond
+ * @brief send command to enable all uids to respond
  */
 void reset_all()
 {
@@ -107,8 +117,8 @@ void reset_all()
 }
 
 /**
- * decect collisions by "collision symbol" ("!"), length and by comparing
- * with additional response
+ * @brief detect collisions by "collision symbol" ("!"), length and by
+ *        comparing with additional response
  */
 bool collision(const std::string &s)
 {
@@ -117,26 +127,30 @@ bool collision(const std::string &s)
     mute(s);
     std::string resp = read_line();
     // uid length should be MAXLEN + 2 (prefix length)
-    if ((resp.size() != MAXLEN + 2) || (resp != s)) { 
+    if ((resp.size() != MAXLEN + 2) || (resp != s)) {
         return true;
     }
 
     return false;
 }
 
-int level = 0;
 /**
  * the main magic is here: generate pattern, send it, check, recursively go
  * deeper in the case of collision
+ * 
+ * this is a recurring funcions, i.e. it could call itselfa
+ *
+ * @returns 1. CHARSET.size() if nothing found
+ *          2. the charset index where uid was found
  */
 size_t scan(const std::string& s, const std::string& pfx,
     std::set<std::string>& found_uids, size_t index)
 {
-    level++;
-    std::cerr << "level=" << level << " index=" << index << std::endl;
+    static int level = 0;
+    std::cerr << "ENTER SCAN: level=" << level << " index=" << index << std::endl;
 
     if (s.size() >= MAXLEN) {
-        std::cerr << "lenth limit reached!" << level << " index=" 
+        std::cerr << "ERROR: length limit reached!" << level << " index="
             << index << std::endl;
         level--;
         return CHARSET.size();
@@ -155,16 +169,32 @@ size_t scan(const std::string& s, const std::string& pfx,
         }
 
         if (collision(resp)) {
-            std::cerr << "COLLISION: " << pfx + reverse_string(next)
-                << " inner_index=" << inner_index 
-                << " level=" << level << " pos=" << pos << std::endl;
-            // go deeper
-            if (inner_index < CHARSET.size()) { 
-                inner_index = scan(next, pfx, found_uids, inner_index);
+            char c = (inner_index < CHARSET.size())
+                ? CHARSET[inner_index] : '.';
 
-                std::cerr << "inner_index=" << inner_index 
-                    << " level=" << level << " pos=" << pos << std::endl;
-                // need to check the same collision point
+            std::cerr << "COLLISION: " << pfx + reverse_string(next)
+                << " inner_index=" << inner_index
+                << " (\"" << c << "\")"
+                << " level=" << level << " pos=" << pos
+                << " (\"" << CHARSET[pos] << "\")" << std::endl;
+
+            if (inner_index < CHARSET.size()) {
+                // go deeper into recursion
+                level++;
+                inner_index = scan(next, pfx, found_uids, inner_index);
+                level--;
+
+                char c1 = (inner_index < CHARSET.size())
+                    ? CHARSET[inner_index] : '.';
+                std::cerr << "RETURN FROM SCAN: inner_index=" << inner_index
+                    << " (\"" << c1 << "\")"
+                    << " level=" << level << " pos=" << pos
+                    << " (\"" << CHARSET[pos] << "\")" << std::endl;
+
+                /*
+                 * need to check the same collision point: if only one uid
+                 * remains it will be found immediately
+                 */
                 pos--;
             } else {
                 inner_index = 0;
@@ -174,9 +204,7 @@ size_t scan(const std::string& s, const std::string& pfx,
 
         if (found_uids.insert(resp).second) {
             std::cerr << "FOUND: " << resp << std::endl;
-            // mute(resp);
-            if (level > 1) {
-                level--;
+            if (level > 0) {
                 return pos;
             }
             else {
@@ -184,7 +212,6 @@ size_t scan(const std::string& s, const std::string& pfx,
             }
         }
     }
-    level--;
     return pos;
 }
 
@@ -235,7 +262,7 @@ int main(int argc, char **argv)
 
     int opt;
     int timeout = 0;
-    while ((opt = getopt_long(argc, argv, "t:", 
+    while ((opt = getopt_long(argc, argv, "t:",
         long_opts, nullptr)) != -1) {
         switch (opt) {
         case 't':
