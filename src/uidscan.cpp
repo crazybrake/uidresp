@@ -93,10 +93,11 @@ void send(const std::string &line)
 /**
  *  self-explaining function name ;)
  */
-std::string send_and_recv(const std::string &line)
+std::string send_and_recv(const std::string &line,
+    int timeout = POLL_TIMEOUT)
 {
     send(line);
-    return read_line(gl_timeout);
+    return read_line(timeout);
 }
 
 /**
@@ -137,8 +138,8 @@ bool collision(const std::string &s)
 /**
  * the main magic is here: generate pattern, send it, check, recursively go
  * deeper in the case of collision
- * 
- * this is a recurring funcions, i.e. it could call itselfa
+ *
+ * this is a recurring funcion, i.e. it could call itself
  *
  * @returns 1. CHARSET.size() if nothing found
  *          2. the charset index where uid was found
@@ -146,12 +147,13 @@ bool collision(const std::string &s)
 size_t scan(const std::string& s, const std::string& pfx,
     std::set<std::string>& found_uids, size_t index)
 {
-    static int level = 0;
-    std::cerr << "ENTER SCAN: level=" << level << " index=" << index << std::endl;
+    static int level = 0; // recursion level
+    std::cerr << "ENTER SCAN: level=" << level
+        << " index=" << index << std::endl;
 
     if (s.size() >= MAXLEN) {
-        std::cerr << "ERROR: length limit reached!" << level << " index="
-            << index << std::endl;
+        std::cerr << "ERROR: length limit reached!" << level
+            << " index=" << index << std::endl;
         level--;
         return CHARSET.size();
     }
@@ -160,18 +162,27 @@ size_t scan(const std::string& s, const std::string& pfx,
     size_t inner_index = 0;
 
     for (; pos < CHARSET.size(); pos++) {
-        std::string next = s + CHARSET[pos];
-        std::string resp = send_and_recv(pfx + reverse_string(next));
+        std::string next;
+        if (level == 0) { // scan by prefix only on level 0
+            next = s;
+            pos = CHARSET.size(); // for return if no collisions
+        } else {
+            next = s + CHARSET[pos];
+        }
+        // see comments for reverse_string() above
+        std::string resp = send_and_recv(pfx + reverse_string(next),
+            gl_timeout);
 
+        // timeout, i.e. no answer
         if (resp.empty()) {
             inner_index = 0;
             continue;
         }
 
         if (collision(resp)) {
+
             char c = (inner_index < CHARSET.size())
                 ? CHARSET[inner_index] : '.';
-
             std::cerr << "COLLISION: " << pfx + reverse_string(next)
                 << " inner_index=" << inner_index
                 << " (\"" << c << "\")"
@@ -186,7 +197,8 @@ size_t scan(const std::string& s, const std::string& pfx,
 
                 char c1 = (inner_index < CHARSET.size())
                     ? CHARSET[inner_index] : '.';
-                std::cerr << "RETURN FROM SCAN: inner_index=" << inner_index
+                std::cerr << "RETURN FROM SCAN: inner_index="
+                    << inner_index
                     << " (\"" << c1 << "\")"
                     << " level=" << level << " pos=" << pos
                     << " (\"" << CHARSET[pos] << "\")" << std::endl;
@@ -204,7 +216,7 @@ size_t scan(const std::string& s, const std::string& pfx,
 
         if (found_uids.insert(resp).second) {
             std::cerr << "FOUND: " << resp << std::endl;
-            if (level > 0) {
+            if (level > 1) {
                 return pos;
             }
             else {
@@ -214,7 +226,6 @@ size_t scan(const std::string& s, const std::string& pfx,
     }
     return pos;
 }
-
 
 /**
  *  check timeout parameter for valid value
@@ -249,6 +260,14 @@ void usage(char *progname)
         << " [--timeout|-t <msec>] <prefix> [prefix ...]\n";
 }
 
+/**
+ * @brief the program accepts one optional parameter `-t <timeout in ms>`
+ *        and at least one required parameter: vendor id (two characters)
+ *
+ * @example
+ *
+ *    uidscan -t 500 CB HS ZL
+ */
 int main(int argc, char **argv)
 {
     set_timeout(POLL_TIMEOUT);
@@ -285,20 +304,24 @@ int main(int argc, char **argv)
 
 // ---- scan logic starts here ----
 
-    reset_all();
+    reset_all(); // move all devices to "no address" state
 
+    // iterate over prefixes
+    std::set<std::string> found_uids;
     for (int i = optind; i < argc; ++i) {
-
         std::string pfx = argv[i];
-        std::set<std::string> found_uids;
-
         scan("", pfx, found_uids, 0);
-
-        reset_all();
-
-        std::cerr << "\n== search complete ==\n";
-        std::cerr << "total uids found: " << found_uids.size() << "\n"
-                  << std::endl;
     }
+    reset_all();
+    std::cerr << std::endl;
+    std::cerr << "== search complete ==" << std::endl;
+    std::cerr << "total uids found: " << found_uids.size() << std::endl;
+    std::cerr << std::endl;
+    for (auto uid: found_uids) {
+        std::cerr << uid << std::endl;
+    }
+    std::cerr << std::endl;
+
     return 0;
 }
+
