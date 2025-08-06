@@ -183,11 +183,13 @@ size_t scan(const std::string& s, const std::string& pfx,
 
             char c = (inner_index < CHARSET.size())
                 ? CHARSET[inner_index] : '.';
+            char p = (pos < CHARSET.size())
+                ? CHARSET[pos] : '.';
             std::cerr << "COLLISION: " << pfx + reverse_string(next)
                 << " inner_index=" << inner_index
                 << " (\"" << c << "\")"
                 << " level=" << level << " pos=" << pos
-                << " (\"" << CHARSET[pos] << "\")" << std::endl;
+                << " (\"" << p << "\")" << std::endl;
 
             if (inner_index < CHARSET.size()) {
                 // go deeper into recursion
@@ -201,7 +203,7 @@ size_t scan(const std::string& s, const std::string& pfx,
                     << inner_index
                     << " (\"" << c1 << "\")"
                     << " level=" << level << " pos=" << pos
-                    << " (\"" << CHARSET[pos] << "\")" << std::endl;
+                    << " (\"" << p << "\")" << std::endl;
 
                 /*
                  * need to check the same collision point: if only one uid
