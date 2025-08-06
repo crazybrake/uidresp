@@ -82,7 +82,9 @@ public:
             result.push_back(candidates[dist(rng)]);
         }
 
-        randomizeFromFifthChar(result);
+        if(uids.size() > 1) {
+            randomizeFromFifthChar(result);
+        }
         return result;
     }
 

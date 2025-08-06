@@ -39,3 +39,11 @@ TEST(UidResponderTest, CollisionFromSingleUid)
     EXPECT_EQ(result, "ABCDEF");
 }
 
+TEST(UidResponderTest, CollisionWithFilthData)
+{
+    std::vector<std::string> uids = { "ABCDEF", "123456" };
+    std::string result = UidResponder::generateCollision(uids, 6);
+    EXPECT_NE(result, "ABCDEF");
+    EXPECT_NE(result, "123456");
+}
+
