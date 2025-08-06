@@ -4,7 +4,7 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CXX
 LT_INIT
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_SRCDIR([src/main.cpp])
+AC_CONFIG_SRCDIR([src])
 
 # GTest detection via pkg-config
 PKG_CHECK_MODULES([GTEST], [gtest >= 1.10], [],
